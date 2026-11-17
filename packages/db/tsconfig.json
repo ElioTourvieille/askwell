@@ -1,4 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["types.ts"]
+  "compilerOptions": { "types": ["node"] },
+  "include": ["types.ts", "supabase-pglite.ts", "*.test.ts"]
 }
