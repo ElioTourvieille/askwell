@@ -1,0 +1,19 @@
+# dépendances
+node_modules
+
+# build
+.next
+dist
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets : ne jamais committer
+.env*
+!.env.example
+
+# divers
+.vercel
+coverage
+.DS_Store
+npm-debug.log*
