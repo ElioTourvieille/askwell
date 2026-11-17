@@ -1,6 +1,6 @@
-// Écrit à la main pour refléter la migration 20261117140000 (le générateur ne peut pas tourner
+// Écrit à la main pour refléter la migration 20261117150000 (le générateur ne peut pas tourner
 // avant que la migration soit appliquée au projet de développement, après la fusion).
-// Sera remplacé par la sortie du générateur de types Supabase (`pnpm db:types`).
+// Sera remplacé par la sortie de `pnpm db:types` (neon-js gen-types).
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -101,6 +101,21 @@ export type Database = {
           },
         ];
       };
+      schema_migrations: {
+        Row: {
+          applied_at: string;
+          version: string;
+        };
+        Insert: {
+          applied_at?: string;
+          version: string;
+        };
+        Update: {
+          applied_at?: string;
+          version?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -127,3 +142,5 @@ export type Database = {
 };
 
 export type Tables<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
+export type TablesInsert<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Insert"];
+export type TablesUpdate<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Update"];

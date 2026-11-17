@@ -1,11 +1,11 @@
 import { PLAN_LIMITS } from "@askwell/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createSupabasePglite, type DbSession, type SupabasePglite } from "./supabase-pglite";
+import { createNeonPglite, type DbSession, type NeonPglite } from "../neon-pglite.ts";
 
-let sb: SupabasePglite;
+let sb: NeonPglite;
 
 beforeEach(async () => {
-  sb = await createSupabasePglite();
+  sb = await createNeonPglite();
 });
 
 afterEach(async () => {
@@ -66,22 +66,22 @@ describe("isolation par propriétaire", () => {
   });
 });
 
-describe("anon", () => {
+describe("anonymous", () => {
   it("n'a accès à aucune table", async () => {
     await seedTwoOwners();
-    for (const table of ["accounts", "projects", "widget_configs"]) {
-      await expect(sb.asAnon((tx) => tx.query(`select * from public.${table}`))).rejects.toThrow(/permission denied/);
+    for (const table of ["accounts", "projects", "widget_configs", "schema_migrations"]) {
+      await expect(sb.asAnonymous((tx) => tx.query(`select * from public.${table}`))).rejects.toThrow(/permission denied/);
     }
     await expect(
-      sb.asAnon((tx) => tx.query("insert into public.accounts (clerk_user_id) values ('x')")),
+      sb.asAnonymous((tx) => tx.query("insert into public.accounts (clerk_user_id) values ('x')")),
     ).rejects.toThrow(/permission denied/);
   });
 
   it("n'exécute aucune fonction", async () => {
-    await expect(sb.asAnon((tx) => tx.query("select * from public.owned_project_ids()"))).rejects.toThrow(
+    await expect(sb.asAnonymous((tx) => tx.query("select * from public.owned_project_ids()"))).rejects.toThrow(
       /permission denied/,
     );
-    await expect(sb.asAnon((tx) => createProject(tx, "user_a", "X", "free"))).rejects.toThrow(/permission denied/);
+    await expect(sb.asAnonymous((tx) => createProject(tx, "user_a", "X", "free"))).rejects.toThrow(/permission denied/);
   });
 });
 
@@ -128,7 +128,7 @@ describe("écritures du propriétaire", () => {
 describe("TRUNCATE", () => {
   it("est refusé à tous les rôles de l'API", async () => {
     await seedTwoOwners();
-    await expect(sb.asAnon((tx) => tx.query("truncate public.projects cascade"))).rejects.toThrow(/permission denied/);
+    await expect(sb.asAnonymous((tx) => tx.query("truncate public.projects cascade"))).rejects.toThrow(/permission denied/);
     await expect(sb.asService((tx) => tx.query("truncate public.projects cascade"))).rejects.toThrow(
       /permission denied/,
     );
@@ -186,13 +186,79 @@ describe("create_project", () => {
   });
 });
 
+describe("jeton sans role: authenticated", () => {
+  it("tourne en anonymous et n'a rien, même avec un claim sub valide", async () => {
+    await seedTwoOwners();
+    const claims = { sub: "user_a" };
+    await expect(sb.asToken(claims, (tx) => tx.query("select * from public.projects"))).rejects.toThrow(
+      /permission denied/,
+    );
+    await expect(sb.asToken(claims, (tx) => tx.query("select * from public.widget_configs"))).rejects.toThrow(
+      /permission denied/,
+    );
+    await expect(sb.asToken(claims, (tx) => tx.query("select * from public.owned_project_ids()"))).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+});
+
+describe("app_service", () => {
+  it("contourne la RLS : il voit les projets de tous les propriétaires", async () => {
+    await seedTwoOwners();
+    const rows = await sb.asService((tx) => tx.query("select owner_id from public.projects order by owner_id"));
+    expect(rows.rows).toHaveLength(2);
+  });
+
+  it("n'est ni superutilisateur, ni membre de neon_superuser, et n'a pas de mot de passe dans la migration", async () => {
+    const role = await sb.db.query<{
+      rolsuper: boolean;
+      rolbypassrls: boolean;
+      rolcanlogin: boolean;
+      member: boolean;
+      rolpassword: string | null;
+    }>(
+      `select r.rolsuper, r.rolbypassrls, r.rolcanlogin, a.rolpassword,
+              pg_has_role('app_service', 'neon_superuser', 'member') as member
+       from pg_roles r join pg_authid a on a.oid = r.oid where r.rolname = 'app_service'`,
+    );
+    expect(role.rows[0]).toEqual({
+      rolsuper: false,
+      rolbypassrls: true,
+      rolcanlogin: true,
+      member: false,
+      rolpassword: null,
+    });
+  });
+
+  it("ne possède aucune table et n'a pas CREATE sur public", async () => {
+    const owned = await sb.db.query("select 1 from pg_tables where schemaname = 'public' and tableowner = 'app_service'");
+    expect(owned.rows).toHaveLength(0);
+    const create = await sb.db.query<{ ok: boolean }>("select has_schema_privilege('app_service', 'public', 'create') as ok");
+    expect(create.rows[0]?.ok).toBe(false);
+  });
+});
+
+describe("schema_migrations", () => {
+  it("enregistre la version de la migration 1, avec la RLS activée et sans accès pour l'API", async () => {
+    const versions = await sb.db.query<{ version: string }>("select version from public.schema_migrations");
+    expect(versions.rows.map((r) => r.version)).toEqual([expect.stringMatching(/^\d{14}$/)]);
+
+    await expect(sb.asUser("user_a", (tx) => tx.query("select * from public.schema_migrations"))).rejects.toThrow(
+      /permission denied/,
+    );
+    await expect(sb.asService((tx) => tx.query("select * from public.schema_migrations"))).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+});
+
 describe("règles de sécurité de la base (§9)", () => {
   it("chaque table de public a la RLS activée", async () => {
     const tables = await sb.db.query<{ relname: string; relrowsecurity: boolean }>(
       `select c.relname, c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'public' and c.relkind = 'r'`,
     );
-    expect(tables.rows.map((t) => t.relname).sort()).toEqual(["accounts", "projects", "widget_configs"]);
+    expect(tables.rows.map((t) => t.relname).sort()).toEqual(["accounts", "projects", "schema_migrations", "widget_configs"]);
     expect(tables.rows.every((t) => t.relrowsecurity)).toBe(true);
   });
 
@@ -208,19 +274,19 @@ describe("règles de sécurité de la base (§9)", () => {
     expect(fns.rows.filter((f) => f.prosecdef).map((f) => f.proname)).toEqual(["owned_project_ids"]);
   });
 
-  it("EXECUTE est limité : create_project à service_role seul, owned_project_ids sans anon", async () => {
+  it("EXECUTE est limité : create_project à app_service seul, owned_project_ids sans anonymous", async () => {
     const can = async (role: string, fn: string) =>
       (await sb.db.query<{ ok: boolean }>("select has_function_privilege($1, $2, 'execute') as ok", [role, fn])).rows[0]
         ?.ok;
 
     const create = "public.create_project(text, text, integer)";
-    expect(await can("service_role", create)).toBe(true);
+    expect(await can("app_service", create)).toBe(true);
     expect(await can("authenticated", create)).toBe(false);
-    expect(await can("anon", create)).toBe(false);
+    expect(await can("anonymous", create)).toBe(false);
 
     const owned = "public.owned_project_ids()";
     expect(await can("authenticated", owned)).toBe(true);
-    expect(await can("service_role", owned)).toBe(true);
-    expect(await can("anon", owned)).toBe(false);
+    expect(await can("app_service", owned)).toBe(true);
+    expect(await can("anonymous", owned)).toBe(false);
   });
 });
