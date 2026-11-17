@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
-/* Jeu unique de jetons de design (docs/project.md §13) : couleurs, rayon, ombres, flou. */
+/*
+ * Jeu unique de jetons de design (docs/project.md §13) : couleurs, rayon, ombres, flou.
+ * Le thème sombre (page d'accueil) est la valeur par défaut. Le thème clair (tableau de bord)
+ * redéfinit les MÊMES noms de jetons sous [data-theme="light"], posé sur un conteneur.
+ */
 @theme {
   --color-bg: #000000;
   --color-fg: #ffffff;
@@ -8,13 +12,74 @@
   --color-glass: rgb(255 255 255 / 0.06);
   --color-glass-border: rgb(255 255 255 / 0.14);
 
+  --color-surface: rgb(255 255 255 / 0.1);
+  --color-primary: #ffffff;
+  --color-primary-fg: #000000;
+  --color-focus: #ffffff;
+  --color-danger: #ff8a8a;
+
   --radius-glass: 1rem;
+  --radius-control: 0.625rem;
   --shadow-glass: 0 8px 32px rgb(0 0 0 / 0.5);
   --blur-glass: 16px;
+
+  --spacing-touch: 2.75rem;
+}
+
+/* Thème clair : mêmes noms, autres valeurs (contrastes >= 4.5:1 pour le texte). */
+[data-theme="light"] {
+  --color-bg: #f6f6f6;
+  --color-fg: #0a0a0a;
+  --color-muted: rgb(10 10 10 / 0.68);
+  --color-glass: rgb(255 255 255 / 0.7);
+  --color-glass-border: rgb(0 0 0 / 0.12);
+
+  --color-surface: rgb(0 0 0 / 0.07);
+  --color-primary: #0a0a0a;
+  --color-primary-fg: #ffffff;
+  --color-focus: #0a0a0a;
+  --color-danger: #b42318;
+
+  --shadow-glass: 0 8px 32px rgb(0 0 0 / 0.1);
+}
+
+/* Explicite pour le thème sombre (utile à l'intérieur d'un conteneur clair). */
+[data-theme="dark"] {
+  --color-bg: #000000;
+  --color-fg: #ffffff;
+  --color-muted: rgb(255 255 255 / 0.6);
+  --color-glass: rgb(255 255 255 / 0.06);
+  --color-glass-border: rgb(255 255 255 / 0.14);
+
+  --color-surface: rgb(255 255 255 / 0.1);
+  --color-primary: #ffffff;
+  --color-primary-fg: #000000;
+  --color-focus: #ffffff;
+  --color-danger: #ff8a8a;
+
+  --shadow-glass: 0 8px 32px rgb(0 0 0 / 0.5);
 }
 
 html,
 body {
   background: var(--color-bg);
   color: var(--color-fg);
+}
+
+@keyframes askwell-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes askwell-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-anim {
+    animation: none !important;
+  }
 }
