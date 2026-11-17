@@ -8,6 +8,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@askwell/shared": "workspace:*",
+    "happy-dom": "^20.0.0",
     "tsup": "^9.0.0"
   }
 }

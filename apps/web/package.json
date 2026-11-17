@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "predev": "pnpm --filter @askwell/widget build",
     "dev": "next dev",
+    "prebuild": "pnpm --filter @askwell/widget build",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc -p tsconfig.json"

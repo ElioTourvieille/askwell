@@ -6,7 +6,8 @@ export default defineConfig({
   platform: "browser",
   target: "es2019",
   minify: true,
-  clean: true,
-  outDir: "dist",
+  clean: false,
+  // Servi par l'application (apps/web/public/widget.js, ignoré par git).
+  outDir: "../web/public",
   outExtension: () => ({ js: ".js" }),
 });
