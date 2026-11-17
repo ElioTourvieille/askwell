@@ -1,5 +1,24 @@
--- Migration 1 : comptes, projets, configuration du widget.
+-- Migration 1 : comptes, projets, configuration du widget (Neon).
 -- Additive. RLS, autorisations et fonctions dans la même migration (project.md §7 et §9).
+--
+-- Prérequis : l'API Data de Neon est activée sur le projet. Elle crée les rôles `anonymous` et
+-- `authenticated` (NOLOGIN) et la fonction `auth.user_id()` (claim `sub` du jeton). Cette migration
+-- ne les crée pas : si l'API Data n'est pas activée, elle échoue ici, volontairement.
+
+-- ---------------------------------------------------------------------------
+-- Rôle de la connexion serveur directe (DATABASE_URL).
+-- Créé en SQL : un rôle créé en SQL n'est PAS membre de neon_superuser (doc Neon, « Manage roles »).
+-- BYPASSRLS lui est donné explicitement. Aucun mot de passe dans le dépôt : le Product Owner le
+-- pose à la main (ALTER ROLE app_service WITH PASSWORD '...'). Sans mot de passe, il ne peut pas se connecter.
+-- ---------------------------------------------------------------------------
+
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'app_service') then
+    create role app_service with login bypassrls;
+  end if;
+end
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -47,7 +66,7 @@ set search_path = ''
 as $$
   select p.id
   from public.projects p
-  where p.owner_id = (select auth.jwt() ->> 'sub')
+  where p.owner_id = (select auth.user_id())
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -97,43 +116,46 @@ alter table public.accounts       enable row level security;
 alter table public.projects       enable row level security;
 alter table public.widget_configs enable row level security;
 
--- accounts : aucune politique pour authenticated, donc aucun accès. service_role contourne la RLS.
+-- accounts : aucune politique pour authenticated, donc aucun accès. app_service contourne la RLS.
 
 create policy projects_select_own on public.projects
   for select to authenticated
-  using (owner_id = (select auth.jwt() ->> 'sub'));
+  using (owner_id = (select auth.user_id()));
 
 create policy projects_update_own on public.projects
   for update to authenticated
-  using (owner_id = (select auth.jwt() ->> 'sub'))
-  with check (owner_id = (select auth.jwt() ->> 'sub'));
+  using (owner_id = (select auth.user_id()))
+  with check (owner_id = (select auth.user_id()));
 
 create policy projects_delete_own on public.projects
   for delete to authenticated
-  using (owner_id = (select auth.jwt() ->> 'sub'));
+  using (owner_id = (select auth.user_id()));
 
 create policy widget_configs_select_own on public.widget_configs
   for select to authenticated
   using (project_id in (select public.owned_project_ids()));
 
 -- ---------------------------------------------------------------------------
--- Autorisations : on part de zéro, puis on accorde le strict nécessaire.
+-- Autorisations : on part de zéro (l'API Data accorde des privilèges par défaut à `authenticated`
+-- sur les futures tables), puis on accorde le strict nécessaire.
 -- ---------------------------------------------------------------------------
 
 revoke all on table public.accounts, public.projects, public.widget_configs
-  from public, anon, authenticated, service_role;
+  from public, anonymous, authenticated, app_service;
+
+grant usage on schema public to app_service;
 
 grant select, insert, update, delete on table public.accounts, public.projects, public.widget_configs
-  to service_role;
--- TRUNCATE n'est jamais accordé aux rôles de l'API (§9).
+  to app_service;
+-- TRUNCATE n'est accordé à aucun rôle de l'API ni à app_service (§9).
 
 grant select on table public.projects, public.widget_configs to authenticated;
 grant update (name) on table public.projects to authenticated;
 grant delete on table public.projects to authenticated;
 
-revoke all on function public.owned_project_ids() from public, anon, authenticated, service_role;
-grant execute on function public.owned_project_ids() to authenticated, service_role;
+revoke all on function public.owned_project_ids() from public, anonymous, authenticated, app_service;
+grant execute on function public.owned_project_ids() to authenticated, app_service;
 
 revoke all on function public.create_project(text, text, integer)
-  from public, anon, authenticated, service_role;
-grant execute on function public.create_project(text, text, integer) to service_role;
+  from public, anonymous, authenticated, app_service;
+grant execute on function public.create_project(text, text, integer) to app_service;

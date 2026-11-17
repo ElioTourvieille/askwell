@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "build": "pnpm -r --if-present build",
-    "db:types": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" --schema public > packages/db/types.ts"
+    "db:types": "npx @neondatabase/neon-js gen-types --db-url \"$DATABASE_URL\" --output packages/db/types.ts",
+    "db:migrate": "node packages/db/scripts/migrate.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
