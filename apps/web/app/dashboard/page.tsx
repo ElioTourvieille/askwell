@@ -1,16 +1,19 @@
 import { auth } from "@clerk/nextjs/server";
-import { UserButton } from "@clerk/nextjs";
+import { EmptyState } from "../../components/states";
+import { Button } from "../../components/ui";
 
 export default async function DashboardPage() {
   // Défense en profondeur : le proxy protège déjà /dashboard.
   await auth.protect();
 
   return (
-    <main className="p-6">
-      <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Tableau de bord</h1>
-        <UserButton />
-      </header>
-    </main>
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">Projets</h1>
+      <EmptyState
+        title="Aucun projet pour l'instant"
+        text="La création de projet arrive bientôt."
+        action={<Button disabled>Bientôt</Button>}
+      />
+    </div>
   );
 }
