@@ -37,11 +37,11 @@ Ordre de construction pour Askwell. Le fichier `docs/project.md` décrit chaque 
 
 **Objectif :** le contrat partagé, la base de données, la connexion et l'interface publique de l'application.
 
-**Clés requises :** le projet de développement Supabase (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`), le MCP Supabase associé à chaque développeur et limité au projet de développement, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, ainsi que Clerk configuré en tant que fournisseur d’authentification tiers dans Supabase
+**Clés requises :** le projet Neon de développement (`NEXT_PUBLIC_NEON_DATA_API_URL`, `DATABASE_URL` du rôle `app_service`) avec l’API Data activée, le MCP Neon associé à chaque développeur et limité au projet de développement, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, ainsi que Clerk configuré comme fournisseur d’authentification de l’API Data de Neon (JWKS de Clerk, claim `role: authenticated` dans le jeton de session)
 
 | Piste                        | Comprend                                                                                                                                                | project.md |
 | --------------------------- | --------------------------------------------------------------------- --------------------------------------------------------------------------------- - | ---------- |
-| **A — Contrat + base de données** | Migrations Supabase pour toutes les tables, pgvector, politiques et autorisations RLS, le propriétaire et les clients de service, types générés. Types partagés pour chaque route API. Limites du forfait.           | §5, §7, §8 |
+| **A — Contrat + base de données** | Migrations Neon pour toutes les tables, pgvector, politiques et autorisations RLS, rôle `app_service` (vérifier qu’il contourne RLS sans être membre de `neon_superuser`), script `pnpm db:migrate` et table `schema_migrations`, clients propriétaire et de service, helper pglite, types générés. Types partagés pour chaque route API. Limites du forfait.           | §5, §7, §8 |
 | **B — Authentification + interfaces**       | Connexion / inscription à Clerk, middleware, ligne `accounts` lors de la première connexion, mise en page du tableau de bord vide avec navigation, page d’accueil (statique, pas encore de widget en direct) | §6.1, §6.2, §13 |
 
 **Terminé lorsque :** les migrations sont exécutées en environnement de développement ; un nouvel utilisateur s’inscrit et accède à un tableau de bord vide ; la page d’accueil est en ligne.
@@ -68,11 +68,11 @@ Ordre de construction pour Askwell. Le fichier `docs/project.md` décrit chaque 
 
 **Objectif :** le bot répond à de vraies questions à partir des documents du propriétaire.
 
-**Clés requises :** `OPENAI_API_KEY`, `ARCJET_KEY` (le bucket de stockage `knowledge` est créé par une migration)
+**Clés requises :** `OPENAI_API_KEY`, `ARCJET_KEY`, `NEON_STORAGE_*` (le compartiment `knowledge` est créé avec le MCP Neon ou la CLI Neon, pas par une migration ; son CORS autorise l’origine de l’application)
 
 | Voie              | Comprend                                                                                                                              | project.md |
 | ----------------- | ------------------------------------------------------------------------------- ------------------------------------------------------ | ---------- |
-| **A — Connaissances** | Coller du texte + télécharger des fichiers PDF/MD/TXT directement dans le stockage Supabase avec des URL signées, extraction de texte, découpage en segments, représentations vectorielles, page « Connaissances » avec statut de la source, suppression, limite de fichiers | §6.4       |
+| **A — Connaissances** | Coller du texte + télécharger des fichiers PDF/MD/TXT directement dans Neon Object Storage avec des URL présignées, extraction de texte, découpage en segments, représentations vectorielles, page « Connaissances » avec statut de la source, suppression, limite de fichiers | §6.4       |
 | **B — Chat**      | Limite de débit Arcjet + détection d’injection de prompts, `POST /api/widget/chat` : quota, récupération, réponse, enregistrement, comptage. Connectez-y le panneau `/embed`.                         | §6.6       |
 
 La voie B teste la récupération avec des segments pré-définis jusqu’à ce que la voie A soit fusionnée.
@@ -119,14 +119,14 @@ La piste B met d’abord en place le chemin 402, puis teste la version Pro en d�
 
 **Objectif :** le flux principal fonctionne sur `main`, sans faille de sécurité ouverte.
 
-**Clés requises :** `LANDING_WIDGET_KEY` (la clé publique d’un projet concernant Askwell lui-même, créée dans l’application). À la fin, le Product Owner crée le projet de production Supabase et configure les variables de production de Vercel.
+**Clés requises :** `LANDING_WIDGET_KEY` (la clé publique d’un projet concernant Askwell lui-même, créée dans l’application). À la fin, le Product Owner crée le projet Neon de production (région compatible Object Storage), y active l’API Data et configure les variables de production de Vercel.
 
 | Voie             | Comprend                                                                                                    | project.md |
 | ---------------- | -------------------------------------------------------------------------------- --------------------------- | ---------- |
 | **A — Sécurité** | Corriger les résultats d’audit en suspens, en-têtes de sécurité (`frame-ancestors`), vérification CORS, dernière vérification de chaque règle du §9  | §9         |
 | **B — Lancement**   | La page d’accueil exécute le widget propre à l’application, optimisation de la réactivité et de l’état vide, exécution du flux principal complet sur `main` | §2, §6.1   |
 
-**Terminé lorsque :** le Product Owner crée le projet de production Supabase, y applique toutes les migrations, configure les variables de production de Vercel et déploie la version ; ensuite, les neuf étapes du flux principal (§2) sont validées sur l’URL de production.
+**Terminé lorsque :** le Product Owner crée le projet Neon de production, y active l’API Data, crée le rôle `app_service` et le compartiment `knowledge`, y applique toutes les migrations, configure les variables de production de Vercel et déploie la version ; ensuite, les neuf étapes du flux principal (§2) sont validées sur l’URL de production.
 
 
 *** Traduit avec www.DeepL.com/Translator (version gratuite) ***

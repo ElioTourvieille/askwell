@@ -50,12 +50,12 @@ Votre tâche (à partir de `get_my_task`) répertorie les sections de `project.m
 
 ## Règles relatives à la base de données
 
-- L’application accède à la base de données uniquement via `supabase-js` : `createOwnerClient()` (jeton Clerk du propriétaire, RLS s’applique) et `createServiceClient()` (clé secrète, serveur uniquement), tous deux situés dans `apps/web/lib/supabase`.
-- Les migrations sont des fichiers SQL situés dans `supabase/migrations`, nommés `<horodatage UTC>_<nom>.sql`, plus récents que la dernière version présente sur `main`. Ne modifiez jamais une migration déjà fusionnée.
+- L’application accède à la base de données uniquement via deux clients situés dans `apps/web/lib/db` : `createOwnerClient()` (`@neon/postgrest-js` sur l’API Data de Neon, jeton Clerk du propriétaire, RLS s’applique) et `createServiceClient()` (connexion Postgres directe via `DATABASE_URL`, rôle `app_service`, serveur uniquement).
+- Les migrations sont des fichiers SQL situés dans `packages/db/migrations`, nommés `<horodatage UTC>_<nom>.sql`, plus récents que la dernière version présente sur `main`. Ne modifiez jamais une migration déjà fusionnée.
 - Chaque nouvelle table ou fonction est fournie avec ses politiques RLS et ses autorisations dans la même migration (voir `project.md` §7 et §9). N’ajoutez une nouvelle table ou colonne que si votre tâche le précise.
-- Testez les migrations, les politiques et les fonctions sur pglite (`packages/db/supabase-pglite.ts`). N’exécutez jamais une pile Supabase locale ni une base de données Docker.
-- Le projet de développement Supabase est partagé par tous les développeurs et toutes les versions préliminaires. Ses données sont jetables, mais n’y appliquez jamais une migration non fusionnée. Une fois votre PR fusionnée, appliquez-la au projet de développement via le MCP Supabase, en notant la version du fichier, puis régénérez les types (à l’aide du générateur de types du MCP) et vérifiez qu’il n’y a pas de différence.
-- Le MCP Supabase est limité au projet « dev ». Ne touchez jamais à la base de données de production. Le responsable produit applique les migrations à la production avant de valider la version.
+- Testez les migrations, les politiques et les fonctions sur pglite (`packages/db/neon-pglite.ts`, qui simule les rôles `authenticated` et `anonymous` et `auth.user_id()`). N’exécutez jamais de base de données locale (Postgres, Docker).
+- Le projet Neon de développement est partagé par tous les développeurs et toutes les versions préliminaires. Ses données sont jetables, mais n’y appliquez jamais une migration non fusionnée. Une fois votre PR fusionnée, appliquez-la au projet de développement via le MCP Neon (`run_sql_transaction`), en enregistrant la version du fichier dans `schema_migrations`, puis régénérez les types (`pnpm db:types`) et vérifiez qu’il n’y a pas de différence.
+- Le MCP Neon est limité au projet « dev ». Ne touchez jamais à la base de données de production. Le responsable produit applique les migrations à la production avec `pnpm db:migrate` avant de valider la version.
 - Les migrations sont additives : la version en production doit continuer de fonctionner pendant l’exécution d’une migration. La suppression ou le renommage d’une table ou d’une colonne s’effectue dans une pull request ultérieure, une fois qu’aucun code déployé ne l’utilise plus.
 
 ## Règles de sécurité
@@ -85,4 +85,5 @@ Votre tâche (à partir de `get_my_task`) répertorie les sections de `project.m
 |---|---|
 | `pnpm dev` | Exécute l’application localement |
 | `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` | Vérifications. Toutes doivent réussir avant un PR. |
-| `pnpm db:types` | Régénère `packages/db/types.ts` à partir du projet de développement (nécessite `SUPABASE_ACCESS_TOKEN` ; les agents utilisent plutôt le générateur de types du MCP) |
+| `pnpm db:types` | Régénère `packages/db/types.ts` à partir du projet de développement (nécessite `DATABASE_URL`) |
+| `pnpm db:migrate` | Applique les migrations en attente et enregistre leur version dans `schema_migrations` (utilisé par le Product Owner pour la production) |

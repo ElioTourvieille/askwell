@@ -38,12 +38,12 @@ L’ensemble du produit en un seul parcours. Lorsque celui-ci fonctionne de bout
 | --------------- - | -------------------------------------------- | --------------------------------------------------- ------------------------------------ |
 | Application              | Next.js (App Router) + TypeScript + Tailwind | Page d’accueil (`/`), tableau de bord (`/dashboard`), panneau de widgets (`/embed`), routes API (`/api/*`) |
 | Chargeur de widgets    | TypeScript « vanilla », regroupé en un seul fichier      | S'exécute sur le site du client. Bouton + iframe. Moins de 5 ko.                               |
-| Base de données         | Supabase Postgres + pgvector                 | Deux projets : dev (partagé par les développeurs et les aperçus Vercel) et production. L'application communique avec elle uniquement via `supabase-js` et l'API Data (§7). |
-| Accès aux données      | `supabase-js`, fonctions Postgres (`rpc()`)  | Client propriétaire (jeton Clerk du propriétaire, RLS appliqué) et un client de service dédié au serveur (clé secrète). Les limites de forfait et de quota sont gérées au sein des fonctions Postgres. |
-| Migrations + types | CLI Supabase                               | Fichiers SQL dans `supabase/migrations` ; types générés dans `packages/db/types.ts` (`pnpm db:types`). Les tests s’exécutent sur pglite avec les rôles Supabase simulés, jamais sur une pile Supabase locale. |
-| Stockage de fichiers     | Supabase Storage (`supabase-js`)             | Compartiment privé `knowledge` (10 Mo, PDF/Markdown/TXT), créé par une migration. Le navigateur effectue le téléchargement directement vers Storage à l’aide d’une URL signée à usage unique. |
+| Base de données         | Neon Postgres + pgvector                 | Deux projets : dev (partagé par les développeurs et les aperçus Vercel) et production. L'application communique avec elle via l'API Data de Neon (client propriétaire) et une connexion Postgres directe côté serveur (§7). Chaque projet est créé dans une région compatible avec Object Storage (par ex. `aws-eu-central-1`). |
+| Accès aux données      | `@neon/postgrest-js`, `@neondatabase/serverless`, fonctions Postgres (`rpc()`)  | Client propriétaire (API Data de Neon, jeton Clerk du propriétaire, RLS appliqué) et client de service dédié au serveur (connexion Postgres directe, rôle `app_service`). Les limites de forfait et de quota sont gérées au sein des fonctions Postgres. |
+| Migrations + types | Fichiers SQL + `pnpm db:migrate`                               | Fichiers SQL dans `packages/db/migrations`, appliqués par `pnpm db:migrate` (table `schema_migrations`) ; types générés par `neon-js gen-types` dans `packages/db/types.ts` (`pnpm db:types`). Les tests s’exécutent sur pglite avec les rôles Neon simulés (`authenticated`, `anonymous`, `auth.user_id()`), jamais sur une base locale. |
+| Stockage de fichiers     | Neon Object Storage (API S3, `@aws-sdk/client-s3`)             | Compartiment privé `knowledge` (10 Mo, PDF/Markdown/TXT), créé avec le MCP Neon ou la CLI Neon, pas par une migration. CORS du compartiment : uniquement l’origine de l’application. Le navigateur effectue le téléchargement directement vers Storage à l’aide d’une URL présignée de courte durée (5 min). |
 | Hébergement          | Vercel                                       | Déploiement en prévisualisation par PR ; production à partir de `main`. Les corps de requête sont limités à 4,5 Mo, les fichiers ne transitent donc jamais par nos routes. |
-| Authentification             | Clerk                                        | Interface utilisateur de connexion/inscription, sessions, middleware. Supabase accepte les jetons de session Clerk (authentification tierce), RLS lit donc l’ID utilisateur à partir de `auth.jwt()->>'sub'`. |
+| Authentification             | Clerk                                        | Interface utilisateur de connexion/inscription, sessions, middleware. L’API Data de Neon accepte les jetons Clerk (fournisseur d’authentification personnalisé, JWKS de Clerk). Le jeton doit contenir `role: authenticated`. RLS lit l’ID utilisateur avec `auth.user_id()`. |
 | Paiements         | Clerk Billing (passerelle de paiement Clerk, mode test) | Tableau des tarifs de Clerk, portail de compte Clerk, webhook Clerk. Pas de compte Stripe.    |
 | IA               | OpenAI                                       | Un modèle de chat + un modèle d’embedding (`text-embedding-3-small`, 1 536 dimensions)              |
 | Sécurité         | Arcjet                                       | Sur les routes de widgets publics : une limite de débit à fenêtre fixe par route + clé publique + adresse IP, et détection des injections de prompt dans les messages de chat avant tout appel à l’IA. Politique « fails open » : une erreur Arcjet ou un délai d’expiration laisse passer la requête et est consignée dans le journal. Le quota mensuel de messages est géré dans Postgres. |
@@ -57,15 +57,15 @@ L’ensemble du produit en un seul parcours. Lorsque celui-ci fonctionne de bout
 
 | Environnement | Description | Qui effectue le déploiement |
 | --- | --- | --- |
-| Production | Production Vercel (à partir de `main`) + le projet de production Supabase | Responsable produit uniquement : effectue une fusion vers `main`, exécute les migrations éventuelles, puis valide la version |
-| Aperçu | Un déploiement d’aperçu Vercel par PR + le projet de développement Supabase | Automatique à chaque push vers une PR |
-| Local | `pnpm dev` + le projet de développement Supabase | Chaque développeur |
+| Production | Production Vercel (à partir de `main`) + le projet Neon de production | Responsable produit uniquement : effectue une fusion vers `main`, exécute les migrations éventuelles, puis valide la version |
+| Aperçu | Un déploiement d’aperçu Vercel par PR + le projet Neon de développement | Automatique à chaque push vers une PR |
+| Local | `pnpm dev` + le projet Neon de développement | Chaque développeur |
 
 | Règle | Détail |
 | --- | --- |
-| Base de données de développement partagée | Chaque agent de développement et chaque prévisualisation partagent le projet de développement. N’y appliquez jamais une migration non fusionnée. Testez les nouvelles migrations sur pglite (`packages/db/supabase-pglite.ts`). Pas de base de données Supabase locale ni de base de données Docker. |
-| Migrations | À exécuter uniquement après la fusion de leur PR : les agents les appliquent à l’environnement de développement via le MCP Supabase (limité au projet de développement), en enregistrant la version du fichier. Le Product Owner les applique toutes à l’environnement de production lorsque celui-ci est mis en ligne. Chaque migration est additive (« expansion et contraction ») : la version en production continue de fonctionner pendant son exécution. Les suppressions et les renommages font l’objet d’une PR ultérieure, une fois qu’aucun code déployé n’utilise l’ancienne structure. |
-| Déploiement en production | La production est mise en ligne en une seule fois, lors de la phase 6 : le Product Owner crée le projet Supabase de production, applique toutes les migrations, configure les variables de production de Vercel et valide la version. Jusqu’à ce moment-là, une fusion vers `main` génère la version de production, mais rien n’est validé. La validation automatique de la production par Vercel est désactivée. |
+| Base de données de développement partagée | Chaque agent de développement et chaque prévisualisation partagent le projet de développement. N’y appliquez jamais une migration non fusionnée. Testez les nouvelles migrations sur pglite (`packages/db/neon-pglite.ts`). Pas de base de données locale ni de base de données Docker. |
+| Migrations | À exécuter uniquement après la fusion de leur PR : les agents les appliquent à l’environnement de développement via le MCP Neon (limité au projet de développement) avec `run_sql_transaction`, en enregistrant la version du fichier dans `schema_migrations`. Le Product Owner les applique toutes à l’environnement de production avec `pnpm db:migrate` lorsque celui-ci est mis en ligne. Chaque migration est additive (« expansion et contraction ») : la version en production continue de fonctionner pendant son exécution. Les suppressions et les renommages font l’objet d’une PR ultérieure, une fois qu’aucun code déployé n’utilise l’ancienne structure. |
+| Déploiement en production | La production est mise en ligne en une seule fois, lors de la phase 6 : le Product Owner crée le projet Neon de production (région compatible Object Storage), active l’API Data, crée le rôle `app_service` et le compartiment `knowledge`, applique toutes les migrations, configure les variables de production de Vercel et valide la version. Jusqu’à ce moment-là, une fusion vers `main` génère la version de production, mais rien n’est validé. La validation automatique de la production par Vercel est désactivée. |
 | Les données de développement sont jetables | Seuls les fichiers de migration parviennent en production. Ne jamais copier de données depuis l’environnement de développement. |
 | Ne jamais déployer en production | Seul le Product Owner effectue une fusion vers `main` et transfère le code en production |
 
@@ -127,8 +127,8 @@ L’ensemble du produit en un seul parcours. Lorsque celui-ci fonctionne de bout
 | Élément       | Détails                                                                                  |
 | ---------- | -------------------------------------------------------------- ------------------------- |
 | Saisie      | Coller du texte avec un titre, ou télécharger un fichier                                               |
-| Types de fichiers | PDF, Markdown, TXT. 10 Mo max (`MAX_KNOWLEDGE_FILE_BYTES`) ; le compartiment impose les mêmes contraintes de taille et de types. |
-| Téléchargement | 1. `upload-url` réserve la source en tant que `uploading` (compte dans la limite) et renvoie une URL signée à usage unique. 2. Le navigateur télécharge directement vers Storage. 3. `finalize` revendique la source une fois (`uploading` → `processing`), vérifie la taille réelle et les octets du PDF, puis la traite. Un fichier refusé est supprimé. Une réservation non finalisée dans les 2 heures est récupérée. |
+| Types de fichiers | PDF, Markdown, TXT. 10 Mo max (`MAX_KNOWLEDGE_FILE_BYTES`) ; Neon ne documente pas de limite de taille ou de type par compartiment : le serveur est la seule barrière. |
+| Téléchargement | 1. `upload-url` réserve la source en tant que `uploading` (compte dans la limite) et renvoie une URL présignée de courte durée (5 min). 2. Le navigateur télécharge directement vers Storage. 3. `finalize` revendique la source une fois (`uploading` → `processing`), lit le fichier une seule fois, vérifie la taille réelle et les octets du PDF sur ces mêmes octets, puis la traite (une URL présignée reste utilisable jusqu’à son expiration). Un fichier refusé est supprimé. Une réservation non finalisée dans les 2 heures est récupérée. |
 | Traitement | Extraction du texte (PDF : `unpdf`) → découpage en blocs → représentations OpenAI → stockage dans pgvector |
 | Actions    | Liste des sources avec leur statut (`uploading` s'affiche comme « en cours de traitement »), suppression d'une source (supprime son fichier et ses blocs) |
 | Limite      | Gratuit : 3 sources par projet. Pro : 25. Les fichiers et les textes collés sont comptabilisés dans la même limite. |
@@ -249,13 +249,13 @@ Deux parties : un petit script de chargement + une iframe.
 
 | Role | May |
 | --- | --- |
-| `anon` | Nothing: no table, no function. Visitors never get a Supabase key. |
-| `authenticated` (the owner's Clerk token) | SELECT rows in their own projects only (`owner_id = auth.jwt()->>'sub'`, via the `owned_project_ids()` / `owned_conversation_ids()` helpers); rename (`name` only) and delete their own projects; execute `owner_activity` (dashboard numbers, runs as the caller). Nothing else. |
-| `service_role` (the server's secret key) | Everything. Used only on the server: visitor routes, the Clerk webhook, knowledge processing, Storage, and writes owners can't make, always after the route checks ownership and plan. |
+| `anonymous` (a token with no `role` claim) | Nothing: no table, no function. Visitors never get a token. |
+| `authenticated` (the owner's Clerk token, carrying `role: authenticated`) | SELECT rows in their own projects only (`owner_id = auth.user_id()`, via the `owned_project_ids()` / `owned_conversation_ids()` helpers); rename (`name` only) and delete their own projects; execute `owner_activity` (dashboard numbers, runs as the caller). Nothing else. |
+| `app_service` (the server's direct Postgres connection, `DATABASE_URL`) | Only what the migrations grant it; bypasses RLS. Never the owner role or a `neon_superuser` member. Used only on the server: visitor routes, the Clerk webhook, knowledge processing, Storage, and writes owners can't make, always after the route checks ownership and plan. |
 
-Limits run inside Postgres functions only `service_role` may execute: `create_project`, `reserve_knowledge_source` (plan limits, passed from `PLAN_LIMITS`), `consume_message`, `save_chat_turn`, `match_chunks`. The three that count (`create_project`, `reserve_knowledge_source`, `consume_message`) check and write under a row lock or in one statement, so concurrent requests can't both pass. Public routes resolve the project from `public_key` only.
+Limits run inside Postgres functions only `app_service` may execute: `create_project`, `reserve_knowledge_source` (plan limits, passed from `PLAN_LIMITS`), `consume_message`, `save_chat_turn`, `match_chunks`. The three that count (`create_project`, `reserve_knowledge_source`, `consume_message`) check and write under a row lock or in one statement, so concurrent requests can't both pass. Public routes resolve the project from `public_key` only.
 
-**Schema changes:** a migration in `supabase/migrations` in the same PR, with its RLS policies and grants, plus regenerated `packages/db/types.ts`. Changing an existing table needs approval first (see `CLAUDE.md`).
+**Schema changes:** a migration in `packages/db/migrations` in the same PR, with its RLS policies and grants, plus regenerated `packages/db/types.ts`. Changing an existing table needs approval first (see `CLAUDE.md`).
 
 ---
 
@@ -301,18 +301,18 @@ Every PR must follow these.
 | ---------------------------- | -------------------------------------------------------------------------------------------- |
 | Plan bypass                  | Plan is read on the server in every gated action. Never from the client.                     |
 | Tenant leak                  | Owner reads use the owner client, so RLS scopes them. Never the service client with a manual owner filter. Service-client writes happen only after the route checks ownership (`getOwnedProject`). Chunk search is scoped to one project. |
-| Database API                 | The Data API is public. Every table has RLS on, with policies and grants in its migration; `anon` gets nothing; TRUNCATE is revoked from API roles. Functions: SECURITY INVOKER (DEFINER only for the RLS helpers), `search_path = ''`, EXECUTE revoked from `PUBLIC`/`anon`/`authenticated` unless a role needs it. Never turn on PostgREST aggregates project-wide. |
+| Database API                 | The Data API is public. Every table has RLS on, with policies and grants in its migration; `anonymous` gets nothing; TRUNCATE is revoked from API roles. Functions: SECURITY INVOKER (DEFINER only for the RLS helpers), `search_path = ''`, EXECUTE revoked from `PUBLIC`/`anonymous`/`authenticated` unless a role needs it. A Clerk token without `role: authenticated` runs as `anonymous` and gets nothing. |
 | Public key abuse             | Public key only identifies a project. It grants no owner rights.                             |
 | Cost abuse                   | Rate limit on public routes. Monthly message quota. Message length limit.                    |
 | Prompt injection (visitor)   | Arcjet detects it before the AI call. System prompt limits scope. Bot never reveals the system prompt or other projects' data.     |
 | Prompt injection (documents) | Uploaded file text is data. The system prompt says so.                                       |
-| File upload                  | Check type and size on the server: declared size and extension at `upload-url`, real size and PDF bytes at `finalize`. Private bucket with its own size and type limits; one-time signed upload URLs; never public URLs. |
+| File upload                  | Check type and size on the server: declared size and extension at `upload-url`, real size and PDF bytes at `finalize`. Private bucket; Neon documents no bucket-level size or type limit, so the server is the only gate; presigned upload URLs that expire in 5 minutes and sign the content type; `finalize` verifies and processes the same bytes it read once; bucket CORS allows only the app origin; never public URLs. |
 | XSS                          | Visitor messages and bot replies render as text, never HTML, in widget and dashboard.        |
 | CORS                         | Public widget routes allow any origin. Owner routes do not.                                  |
 | postMessage                  | Loader and panel check `event.origin` on every message. Never `*` as target origin for data. |
 | Clickjacking                 | Only `/embed` may be framed by other sites. Other pages send `frame-ancestors 'self'`.       |
 | Webhook                      | Clerk webhook signature verified before any update                                           |
-| Secrets                      | No secret keys in the widget bundle or `NEXT_PUBLIC_*`. `SUPABASE_SECRET_KEY` is read only by `lib/supabase/service.ts` (`import "server-only"`). Test keys only. |
+| Secrets                      | No secret keys in the widget bundle or `NEXT_PUBLIC_*`. `DATABASE_URL` and the storage credentials (`NEON_STORAGE_*`) are read only by `lib/db/service.ts` and `lib/storage.ts` (`import "server-only"`). Test keys only. |
 
 ---
 
@@ -324,9 +324,7 @@ apps/
   widget/         # vanilla TS loader → dist/widget.js
 packages/
   shared/         # contract: types, API shapes, plan limits
-  db/             # generated Supabase types (types.ts) + pglite test helper
-supabase/
-  migrations/     # SQL migrations (Supabase CLI)
+  db/             # SQL migrations, generated types (types.ts), pglite test helper
 docs/
   project.md      # this file
   plan.md         # phases (human-written)
@@ -338,8 +336,8 @@ docs/
 
 | Variable                                                                         | Used by         | Public? |
 | -------------------------------------------------------------------------------- | --------------- | ------- |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (public by design: RLS is the boundary) | Client + server | Yes |
-| `SUPABASE_SECRET_KEY` (acts as `service_role`, skips RLS)                        | Server only     | No      |
+| `NEXT_PUBLIC_NEON_DATA_API_URL` (public by design: RLS is the boundary) | Client + server | Yes |
+| `DATABASE_URL` (connects as `app_service`, skips RLS), `NEON_STORAGE_ENDPOINT`, `NEON_STORAGE_REGION`, `NEON_STORAGE_ACCESS_KEY_ID`, `NEON_STORAGE_SECRET_ACCESS_KEY` (Object Storage; Neon hands these out as `AWS_*`, renamed here so they never clash with Vercel's own AWS variables)                        | Server only     | No      |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`                                              | Client          | Yes     |
 | `CLERK_SECRET_KEY`                                                               | Server          | No      |
 | `OPENAI_API_KEY`                                                                 | Server          | No      |
@@ -349,9 +347,9 @@ docs/
 | `NEXT_PUBLIC_APP_URL`                                                            | Client + server | Yes     |
 | `LANDING_WIDGET_KEY`                                                             | Server (read at request time) | No (it is a public key, but per-environment config) |
 
-`.env.example` lists every variable with no values. `.env` is never committed.
+`.env.example` lists every variable with no values. `.env` is never committed. The owner-role connection string that `pnpm db:migrate` uses on production is typed in the Product Owner's terminal; it never goes in an env file or in Vercel.
 
-Each Vercel environment gets its Supabase project's values: Production → the prod project, Preview and Development → the dev project.
+Each Vercel environment gets its Neon project's values: Production → the prod project, Preview and Development → the dev project.
 
 ---
 
