@@ -1,3 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# pnpm 12 fails the install when a dependency has a build script that is not
+# approved. esbuild (pulled in by tsup and vitest) is the only one.
+allowBuilds:
+  esbuild: true
