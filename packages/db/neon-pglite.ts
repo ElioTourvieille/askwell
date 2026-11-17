@@ -1,4 +1,5 @@
 import { PGlite, type Transaction } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite-pgvector";
 import { MIGRATIONS_DIR, readMigrationFiles } from "./scripts/files.ts";
 import { runMigrations, type SqlExecutor } from "./scripts/runner.ts";
 
@@ -7,6 +8,9 @@ import { runMigrations, type SqlExecutor } from "./scripts/runner.ts";
  * - rôles `anonymous` et `authenticated` (NOLOGIN) ; `authenticated` reçoit des privilèges par défaut
  *   sur les futures tables de `public` (c'est ce que les migrations doivent retirer) ;
  * - `auth.user_id()`, qui lit le claim `sub` du jeton (ici dans le réglage `request.jwt.claims`) ;
+ * - pgvector, préinstallé : sur Neon, `neondb_owner` (membre de `neon_superuser`) exécute `create extension vector`
+ *   lui-même ; dans pglite il n'en a pas le droit (extension non « trusted »), donc la simulation l'installe et la
+ *   migration passe par `create extension if not exists` ;
  * - un propriétaire `neondb_owner` qui n'est pas superutilisateur mais a BYPASSRLS/CREATEROLE
  *   (membre simulé de `neon_superuser`) : c'est lui qui exécute les migrations.
  *
@@ -19,6 +23,8 @@ const NEON_SIMULATION_SQL = `
   create role neon_superuser nologin createrole createdb bypassrls;
   create role neondb_owner login createrole createdb bypassrls;
   grant neon_superuser to neondb_owner;
+
+  create extension vector with schema public;
 
   create schema auth;
   create function auth.user_id() returns text
@@ -63,7 +69,8 @@ function executorFor(db: PGlite): SqlExecutor {
 
 /** Crée une base pglite en mémoire, simule Neon et applique les migrations (comme `db:migrate`). */
 export async function createNeonPglite(migrationsDir: string = MIGRATIONS_DIR): Promise<NeonPglite> {
-  const db = new PGlite();
+  // Charge le binaire pgvector ; l'extension est créée par NEON_SIMULATION_SQL.
+  const db = new PGlite({ extensions: { vector } });
   await db.exec(NEON_SIMULATION_SQL);
 
   await db.exec("set role neondb_owner");
