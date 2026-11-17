@@ -108,6 +108,20 @@ describe("postMessage", () => {
     expect(isOpen(iframe)).toBe(true);
   });
 
+  it("indicateur de non lus affiché même quand show_badge est faux", async () => {
+    mockFetch(true, { ...DEFAULT_WIDGET_CONFIG, show_badge: false });
+    await init(makeScript("pk_abc"));
+    const root = (document.querySelector("[data-askwell]") as HTMLElement).shadowRoot as ShadowRoot;
+    const button = root.querySelector("button") as HTMLButtonElement;
+    button.click(); // crée l'iframe
+    const iframe = root.querySelector("iframe") as HTMLIFrameElement;
+    button.click(); // referme : les messages non lus ne comptent que panneau fermé
+    send(BASE, { source: "askwell", type: "unread", count: 3 }, iframe.contentWindow);
+    const badge = root.querySelector(".badge") as HTMLElement;
+    expect(badge.hidden).toBe(false);
+    expect(badge.textContent).toBe("3");
+  });
+
   it("message close valide accepté : l'iframe se ferme", async () => {
     const { iframe } = await openPanel();
     send(BASE, { source: "askwell", type: "close" }, iframe.contentWindow);

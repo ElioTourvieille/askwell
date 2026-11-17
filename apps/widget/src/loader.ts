@@ -96,7 +96,7 @@ function mount(base: string, key: string, config: WidgetConfig): void {
   const badge = document.createElement("span");
   badge.className = "badge";
   badge.hidden = true;
-  if (config.show_badge) button.appendChild(badge);
+  button.appendChild(badge); // indicateur de non lus : indépendant de `show_badge` (qui ne concerne que « Powered by »)
 
   root.append(style, button);
   document.body.appendChild(host);
@@ -139,7 +139,7 @@ function mount(base: string, key: string, config: WidgetConfig): void {
     if (msg.type === "close") setOpen(false);
     else if (msg.type === "resize") {
       iframe.style.height = `${Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, msg.height))}px`;
-    } else if (msg.type === "unread" && config.show_badge && !isOpen) {
+    } else if (msg.type === "unread" && !isOpen) {
       badge.textContent = String(msg.count);
       badge.hidden = msg.count === 0;
     }
