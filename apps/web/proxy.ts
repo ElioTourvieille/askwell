@@ -1,3 +1,4 @@
+import { apiError, errorStatus } from "@askwell/shared";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { isApiRoute, isProtectedRoute } from "./lib/auth/routes";
@@ -10,10 +11,9 @@ export default clerkMiddleware(async (auth, req) => {
   if (isApiRoute(pathname)) {
     const { isAuthenticated } = await auth();
     if (!isAuthenticated) {
-      return NextResponse.json(
-        { error: { code: "unauthorized", message: "Connexion requise." } },
-        { status: 401 },
-      );
+      return NextResponse.json(apiError("unauthorized", "Connexion requise."), {
+        status: errorStatus("unauthorized"),
+      });
     }
     return;
   }
