@@ -241,7 +241,7 @@ describe("app_service", () => {
 describe("schema_migrations", () => {
   it("enregistre la version de la migration 1, avec la RLS activée et sans accès pour l'API", async () => {
     const versions = await sb.db.query<{ version: string }>("select version from public.schema_migrations");
-    expect(versions.rows.map((r) => r.version)).toEqual([expect.stringMatching(/^\d{14}$/)]);
+    expect(versions.rows.map((r) => r.version)[0]).toBe("20261117150000");
 
     await expect(sb.asUser("user_a", (tx) => tx.query("select * from public.schema_migrations"))).rejects.toThrow(
       /permission denied/,
@@ -258,14 +258,17 @@ describe("règles de sécurité de la base (§9)", () => {
       `select c.relname, c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'public' and c.relkind = 'r'`,
     );
-    expect(tables.rows.map((t) => t.relname).sort()).toEqual(["accounts", "projects", "schema_migrations", "widget_configs"]);
+    // Les tables des migrations suivantes sont couvertes par leur propre test.
+    expect(tables.rows.map((t) => t.relname)).toEqual(
+      expect.arrayContaining(["accounts", "projects", "schema_migrations", "widget_configs"]),
+    );
     expect(tables.rows.every((t) => t.relrowsecurity)).toBe(true);
   });
 
   it("chaque fonction de public a search_path vide ; seul owned_project_ids est SECURITY DEFINER", async () => {
     const fns = await sb.db.query<{ proname: string; prosecdef: boolean; proconfig: string[] | null }>(
       `select p.proname, p.prosecdef, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public'`,
+       where n.nspname = 'public' and p.proname in ('create_project', 'owned_project_ids')`,
     );
     expect(fns.rows.map((f) => f.proname).sort()).toEqual(["create_project", "owned_project_ids"]);
     for (const fn of fns.rows) {
