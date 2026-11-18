@@ -17,3 +17,6 @@ next-env.d.ts
 coverage
 .DS_Store
 npm-debug.log*
+
+# widget construit par tsup (apps/widget)
+apps/web/public/widget.js
