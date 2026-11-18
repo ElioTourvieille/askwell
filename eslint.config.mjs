@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import nextPlugin from "@next/eslint-plugin-next";
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/next-env.d.ts", ".agents/**", ".claude/**", ".jsmhq/**"] },
+  { ignores: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/next-env.d.ts", ".agents/**", ".claude/**", ".jsmhq/**", "apps/web/public/widget.js"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
