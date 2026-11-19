@@ -2,37 +2,42 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_NAME, MAX_MESSAGE_LENGTH, type WidgetConfig } from "@askwell/shared";
-import { fakeReply } from "../../lib/embed/fake-reply";
-import { QuotaReachedError } from "../../lib/embed/errors";
+import { createChatSession, statusAfter, type ChatSession, type PanelStatus } from "../../lib/embed/chat-session";
 import { postToParent } from "../../lib/embed/parent";
+import { readPublicKey } from "../../lib/embed/public-key";
 import { getVisitorId } from "../../lib/embed/visitor-id";
 import { EmptyState, ErrorState } from "../states";
 import { Button } from "../ui";
 import { MessageList, type ChatMessage } from "./MessageList";
 import { QuotaNotice } from "./QuotaNotice";
+import { RejectedNotice } from "./RejectedNotice";
 
 type Props = { config: WidgetConfig; parentOrigin: string | null };
-type Status = "idle" | "typing" | "error" | "quota";
 
 export function EmbedPanel({ config, parentOrigin }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<PanelStatus>("idle");
   const [lastSent, setLastSent] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const unreadRef = useRef(0);
-  const visitorIdRef = useRef<string | null>(null);
+  // Conversation du visiteur, gardée en mémoire de l'iframe (créée au premier envoi : il faut `window`).
+  const sessionRef = useRef<ChatSession | null>(null);
 
   const send = useCallback(
     (to: Parameters<typeof postToParent>[1]) => postToParent(parentOrigin, to),
     [parentOrigin],
   );
 
-  // Identifiant du visiteur (localStorage protégé, repli en mémoire) — utilisé par la route de chat en phase 3.
-  useEffect(() => {
-    visitorIdRef.current = getVisitorId();
-  }, []);
+  function getSession(): ChatSession | null {
+    if (sessionRef.current) return sessionRef.current;
+    // La clé publique vient de l'URL de l'iframe (`/embed?key=pk_…`), la même que celle déjà validée par la page.
+    const key = readPublicKey(window.location.search);
+    if (!key) return null;
+    sessionRef.current = createChatSession({ key, getVisitorId });
+    return sessionRef.current;
+  }
 
   // Panneau caché (iframe fermée) → les réponses comptent comme non lues ; visible → remise à zéro.
   useEffect(() => {
@@ -60,18 +65,23 @@ export function EmbedPanel({ config, parentOrigin }: Props) {
   }, [messages, status]);
 
   async function deliver(message: string) {
+    const session = getSession();
+    // Clé absente ou invalide dans l'URL : rien à envoyer, on affiche l'erreur (la page affiche déjà un écran neutre).
+    if (!session) {
+      setStatus("error");
+      return;
+    }
     setStatus("typing");
-    try {
-      const reply = await fakeReply(message);
-      setMessages((m) => [...m, { id: crypto.randomUUID(), role: "bot", text: reply }]);
-      setStatus("idle");
+    const outcome = await session.send(message);
+    if (outcome.kind === "reply") {
+      // Texte brut : React échappe `outcome.text`, jamais de HTML (project.md §9, XSS).
+      setMessages((m) => [...m, { id: crypto.randomUUID(), role: "bot", text: outcome.text }]);
       if (rootRef.current && rootRef.current.getClientRects().length === 0) {
         unreadRef.current += 1;
         send({ source: "askwell", type: "unread", count: unreadRef.current });
       }
-    } catch (error) {
-      setStatus(error instanceof QuotaReachedError ? "quota" : "error");
     }
+    setStatus(statusAfter(outcome));
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -112,9 +122,14 @@ export function EmbedPanel({ config, parentOrigin }: Props) {
         ) : (
           <MessageList messages={messages} typing={status === "typing"} accent={config.button_color} />
         )}
-        {status === "quota" ? (
+        {status === "quota" || status === "limited" ? (
           <div className="mt-3">
             <QuotaNotice />
+          </div>
+        ) : null}
+        {status === "rejected" ? (
+          <div className="mt-3">
+            <RejectedNotice />
           </div>
         ) : null}
         {status === "error" ? (
