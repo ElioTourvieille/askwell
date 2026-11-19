@@ -1,18 +1,19 @@
-import { DEFAULT_WIDGET_CONFIG, type WidgetConfig } from "@askwell/shared";
+import "server-only";
+import type { WidgetConfig } from "@askwell/shared";
+import { getWidgetConfig } from "../widget/get-widget-config";
 
 /**
  * SEUL endroit qui obtient la configuration du widget pour le panneau.
  *
- * TODO(A2 — route /api/widget/config fusionnée) : remplacer le `return DEFAULT_WIDGET_CONFIG` ci-dessous par
- * l'appel réel, sur la même origine :
- *
- *   const res = await fetch(`${baseUrl}/api/widget/config?key=${encodeURIComponent(key)}`, { cache: "no-store" });
- *   if (!res.ok) return null;
- *   return WidgetConfigResponseSchema.parse(await res.json());
- *
- * `null` = clé inconnue ou erreur : la page affiche alors l'écran neutre.
+ * Appel direct de `getWidgetConfig` (même logique que `GET /api/widget/config`, forfait appliqué côté serveur),
+ * sans requête HTTP vers soi-même. `null` = clé inconnue ou erreur : la page affiche alors l'écran neutre.
+ * Le détail d'une erreur reste dans les journaux serveur, jamais dans la page.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- `key` sera utilisé par l'appel réel (voir TODO)
 export async function getEmbedConfig(key: string): Promise<WidgetConfig | null> {
-  return DEFAULT_WIDGET_CONFIG;
+  try {
+    return await getWidgetConfig(key);
+  } catch (error) {
+    console.error("getEmbedConfig", error);
+    return null;
+  }
 }
