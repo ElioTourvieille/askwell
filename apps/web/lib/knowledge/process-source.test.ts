@@ -227,6 +227,29 @@ describe("processSource sur pglite", () => {
     expect((await statusOf(sourceId))?.status).toBe("failed");
   });
 
+  it("trop de segments (fichier) : `too_much_text`, fichier supprimé, aucun appel OpenAI, aucun segment", async () => {
+    const key = `projects/${projectId}/enorme`;
+    const sourceId = await claimedSource("txt", key);
+    const deleteObject = vi.fn(async () => undefined);
+    // ~1,6 Mo : sous la limite de taille du fichier, mais plus de MAX_CHUNKS_PER_SOURCE segments.
+    const text = Array.from({ length: 50_000 }, (_, i) => `Phrase numéro ${i} du document.`).join(" ");
+    const bytes = new TextEncoder().encode(text);
+    expect(bytes.length).toBeLessThan(10 * 1024 * 1024);
+    const result = await processSource({
+      run,
+      projectId,
+      sourceId,
+      content: { kind: "file", type: "txt", bytes, storageKey: key },
+      deleteObject,
+      embed: fakeEmbed,
+    });
+    expect(result).toEqual({ ok: false, reason: "too_much_text", fileDeleted: true });
+    expect(deleteObject).toHaveBeenCalledWith(key);
+    expect(fakeEmbed).not.toHaveBeenCalled();
+    expect((await chunksOf(sourceId)).rows).toHaveLength(0);
+    expect(await statusOf(sourceId)).toEqual({ status: "failed", storage_key: null });
+  });
+
   it("insère par lots : plus de segments qu'un lot", async () => {
     const sourceId = await claimedSource("text");
     // ~80 000 caractères -> bien plus de 50 segments (taille d'un lot).

@@ -1,7 +1,7 @@
 import type { KnowledgeFileType } from "@askwell/shared";
 import { embedTexts } from "../openai";
 import { chunkText } from "./chunk-text";
-import { INSERT_BATCH_SIZE } from "./constants";
+import { INSERT_BATCH_SIZE, MAX_CHUNKS_PER_SOURCE } from "./constants";
 import { ExtractionError, extractText, verifyFile, type RefusalReason } from "./extract-text";
 
 /**
@@ -26,7 +26,7 @@ export type ProcessSourceInput = {
   embed?: (texts: string[]) => Promise<number[][]>;
 };
 
-export type FailureReason = RefusalReason | "unreadable" | "no_text" | "embedding_failed" | "insert_failed" | "not_processing";
+export type FailureReason = RefusalReason | "unreadable" | "no_text" | "too_much_text" | "embedding_failed" | "insert_failed" | "not_processing";
 
 export type ProcessResult =
   | { ok: true; chunks: number }
@@ -120,6 +120,8 @@ export async function processSource(input: ProcessSourceInput): Promise<ProcessR
 
   const chunks = chunkText(text);
   if (chunks.length === 0) return fail("no_text", content.kind === "file");
+  // Avant tout appel à `embed` : un texte démesuré ne doit coûter ni appels OpenAI ni stockage.
+  if (chunks.length > MAX_CHUNKS_PER_SOURCE) return fail("too_much_text", content.kind === "file");
 
   let vectors: number[][];
   try {
