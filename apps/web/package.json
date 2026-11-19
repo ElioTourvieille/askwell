@@ -11,16 +11,21 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@arcjet/next": "^1.16.0",
     "@askwell/db": "workspace:*",
     "@askwell/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1171.0",
+    "@aws-sdk/s3-request-presigner": "^3.1171.0",
     "@clerk/localizations": "^4.24.8",
     "@clerk/nextjs": "^7.10.0",
     "@neon/postgrest-js": "^0.3.0",
     "@neondatabase/serverless": "^1.2.1",
     "next": "^16.4.6",
+    "openai": "^7.59.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "unpdf": "^2.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
