@@ -16,6 +16,9 @@ type Props = {
   initialError?: string | null;
 };
 
+const LINK_CLASS =
+  "inline-flex min-h-touch items-center justify-center rounded-control border border-glass-border bg-glass px-5 text-sm font-medium text-fg backdrop-blur-(--blur-glass) hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+
 export function ProjectItem({ project, onRename, onDelete, initialMode = "view", initialError = null }: Props) {
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState(project.name);
@@ -93,11 +96,11 @@ export function ProjectItem({ project, onRename, onDelete, initialMode = "view",
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Link
-                href={`/dashboard/projects/${project.id}/install`}
-                className="inline-flex min-h-touch items-center justify-center rounded-control border border-glass-border bg-glass px-5 text-sm font-medium text-fg backdrop-blur-(--blur-glass) hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              >
+              <Link href={`/dashboard/projects/${project.id}/install`} className={LINK_CLASS}>
                 Installer
+              </Link>
+              <Link href={`/dashboard/projects/${project.id}/knowledge`} className={LINK_CLASS}>
+                Connaissances
               </Link>
               <Button
                 variant="secondary"
