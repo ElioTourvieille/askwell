@@ -38,6 +38,25 @@ describe("loadInstallPage", () => {
     await expect(loadInstallPage("p1")).resolves.toEqual({ snippet: null });
   });
 
+  it("aperçu Vercel sans NEXT_PUBLIC_APP_URL → extrait vers https://<VERCEL_URL>", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_URL", "askwell-git-ma-branche-tourvieilles-projects.vercel.app");
+    getOwnedProject.mockResolvedValue({ id: "p1", public_key: "pk_abc" });
+    await expect(loadInstallPage("p1")).resolves.toEqual({
+      snippet:
+        '<script src="https://askwell-git-ma-branche-tourvieilles-projects.vercel.app/widget.js" data-key="pk_abc"></script>',
+    });
+  });
+
+  it("production sans NEXT_PUBLIC_APP_URL → pas d'extrait, même avec VERCEL_URL", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_URL", "askwell-abc123.vercel.app");
+    getOwnedProject.mockResolvedValue({ id: "p1", public_key: "pk_abc" });
+    await expect(loadInstallPage("p1")).resolves.toEqual({ snippet: null });
+  });
+
   it("une erreur de base remonte (pas de faux 404)", async () => {
     getOwnedProject.mockRejectedValue(new Error("db"));
     await expect(loadInstallPage("p1")).rejects.toThrow("db");
