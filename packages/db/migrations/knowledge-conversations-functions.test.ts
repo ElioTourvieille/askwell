@@ -664,8 +664,8 @@ describe("règles de sécurité de la base (§9), schéma complet", () => {
     ]);
   });
 
-  it("enregistre les deux migrations, dans l'ordre", async () => {
+  it("enregistre les migrations, dans l'ordre", async () => {
     const versions = await sb.db.query<{ version: string }>("select version from public.schema_migrations order by version");
-    expect(versions.rows.map((r) => r.version)).toEqual(["20261117150000", "20261117160000"]);
+    expect(versions.rows.map((r) => r.version)).toEqual(["20261117150000", "20261117160000", "20261119150000"]);
   });
 });

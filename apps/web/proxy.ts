@@ -24,8 +24,11 @@ export default clerkMiddleware(async (auth, req) => {
 
 export const config = {
   matcher: [
-    // Ignore les internes de Next et les fichiers statiques.
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    // Ignore les internes de Next, les fichiers statiques, /embed et /api/widget/* (publics,
+    // §6.5 et §9 : dans l'iframe tierce, sans cookies, clerkMiddleware bouclerait sur le
+    // handshake Clerk).
+    "/((?!_next|embed(?:/|$)|api/widget(?:/|$)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // API : tout sauf /api/widget/* (publique, appelée par le widget et l'iframe).
+    "/(api(?!/widget(?:/|$))|trpc)(.*)",
   ],
 };
