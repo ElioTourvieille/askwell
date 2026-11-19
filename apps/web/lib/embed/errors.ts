@@ -25,7 +25,18 @@ export class ConversationNotFoundError extends Error {
   }
 }
 
-/** Erreur réessayable : réseau, erreur 5xx, réponse illisible ou refus sans suite particulière. */
+/**
+ * Message refusé par la protection (HTTP 400 `injection_blocked`). Pas réessayable tel quel : le visiteur
+ * doit reformuler. Le texte affiché est neutre et ne dit rien de la détection.
+ */
+export class MessageRejectedError extends Error {
+  constructor() {
+    super("message_rejected");
+    this.name = "MessageRejectedError";
+  }
+}
+
+/** Erreur réessayable : réseau, délai dépassé, erreur 5xx, réponse illisible ou refus sans suite particulière. */
 export class ChatRequestError extends Error {
   constructor(reason: string) {
     super(reason);

@@ -1,12 +1,14 @@
 import { postChat, type FetchLike } from "./chat-client";
-import { ConversationNotFoundError, QuotaReachedError } from "./errors";
+import { ConversationNotFoundError, MessageRejectedError, QuotaReachedError } from "./errors";
 
 /** Ce que le panneau doit afficher après l'envoi d'un message. */
 export type ChatOutcome =
   | { kind: "reply"; text: string }
   /** 429. `permanent` : quota mensuel atteint (le panneau se bloque) ; sinon limite par minute (on peut réessayer). */
   | { kind: "limited"; permanent: boolean }
-  /** Réseau, 5xx, réponse illisible ou autre refus : erreur réessayable. */
+  /** 400 `injection_blocked` : message neutre, pas de « Réessayer » (le visiteur reformule). */
+  | { kind: "rejected" }
+  /** Réseau, délai dépassé, 5xx, réponse illisible ou autre refus : erreur réessayable. */
   | { kind: "error" };
 
 export type ChatSessionOptions = {
@@ -59,18 +61,23 @@ export function createChatSession(options: ChatSessionOptions): ChatSession {
         if (error instanceof QuotaReachedError) {
           return { kind: "limited", permanent: error.code === "quota_exceeded" };
         }
+        if (error instanceof MessageRejectedError) return { kind: "rejected" };
         return { kind: "error" };
       }
     },
   };
 }
 
-/** État du panneau. `quota` bloque la saisie ; `limited` affiche le même message mais laisse réessayer. */
-export type PanelStatus = "idle" | "typing" | "error" | "quota" | "limited";
+/**
+ * État du panneau. `quota` bloque la saisie ; `limited` affiche le même message mais laisse réessayer ;
+ * `rejected` affiche un message neutre, sans « Réessayer », la saisie reste active.
+ */
+export type PanelStatus = "idle" | "typing" | "error" | "quota" | "limited" | "rejected";
 
 /** État du panneau après un envoi terminé. */
 export function statusAfter(outcome: ChatOutcome): PanelStatus {
   if (outcome.kind === "reply") return "idle";
   if (outcome.kind === "limited") return outcome.permanent ? "quota" : "limited";
+  if (outcome.kind === "rejected") return "rejected";
   return "error";
 }

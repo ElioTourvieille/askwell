@@ -10,6 +10,7 @@ import { EmptyState, ErrorState } from "../states";
 import { Button } from "../ui";
 import { MessageList, type ChatMessage } from "./MessageList";
 import { QuotaNotice } from "./QuotaNotice";
+import { RejectedNotice } from "./RejectedNotice";
 
 type Props = { config: WidgetConfig; parentOrigin: string | null };
 
@@ -124,6 +125,11 @@ export function EmbedPanel({ config, parentOrigin }: Props) {
         {status === "quota" || status === "limited" ? (
           <div className="mt-3">
             <QuotaNotice />
+          </div>
+        ) : null}
+        {status === "rejected" ? (
+          <div className="mt-3">
+            <RejectedNotice />
           </div>
         ) : null}
         {status === "error" ? (
