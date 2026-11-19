@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_MESSAGE_LENGTH } from "@askwell/shared";
 import { MessageList } from "../../components/embed/MessageList";
-import { fakeReply } from "./fake-reply";
 import { parseParentOrigin, postToParent } from "./parent";
 import { getVisitorId, resetMemoryVisitorId } from "./visitor-id";
 
@@ -78,15 +77,5 @@ describe("origin", () => {
     expect(parent.postMessage).not.toHaveBeenCalled();
     postToParent("https://client.example", { source: "askwell", type: "close" }, parent);
     expect(parent.postMessage).toHaveBeenCalledWith({ source: "askwell", type: "close" }, "https://client.example");
-  });
-});
-
-describe("réponse factice", () => {
-  it("renvoie une réponse non vide", async () => {
-    vi.useFakeTimers();
-    const p = fakeReply("Bonjour");
-    await vi.advanceTimersByTimeAsync(1000);
-    await expect(p).resolves.toContain("Bonjour");
-    vi.useRealTimers();
   });
 });
