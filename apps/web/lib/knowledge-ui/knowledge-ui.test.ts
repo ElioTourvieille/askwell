@@ -5,7 +5,14 @@ import {
   UploadUrlResponseSchema,
 } from "@askwell/shared";
 import { statusLabel } from "./format";
-import { deleteSource, knowledgeLimitMessage, submitFile, submitPaste, validateFile } from "./knowledge-api";
+import {
+  UPLOAD_CONTENT_TYPES,
+  deleteSource,
+  knowledgeLimitMessage,
+  submitFile,
+  submitPaste,
+  validateFile,
+} from "./knowledge-api";
 
 const PROJECT = "0b0f6f7e-3c5a-4d0e-9a52-7b1c3e1d2f10";
 const SOURCE = "5d3b5b5e-1d7f-4a1e-8f55-0c2f6a9e7b11";
@@ -110,8 +117,29 @@ describe("submitFile", () => {
     expect(put.url).toBe(uploadUrl);
     expect(put.init?.method).toBe("PUT");
     expect(put.init?.body).toBe(file);
+    expect(put.init?.headers).toEqual({ "content-type": "text/markdown" });
     expect(finalize.url).toBe(`/api/projects/${PROJECT}/knowledge/finalize`);
     expect(JSON.parse(String(finalize.init?.body))).toEqual({ sourceId: SOURCE });
+  });
+
+  it("le Content-Type du PUT vient d'une table fixe, jamais de file.type", async () => {
+    expect(UPLOAD_CONTENT_TYPES).toEqual({ pdf: "application/pdf", md: "text/markdown", txt: "text/plain" });
+    // file.type vide (.md sous Windows) ou exotique (text/x-markdown) : l'en-tête reste celui de la table.
+    const cases: Array<[File, string]> = [
+      [new File(["x"], "a.md", { type: "" }), "text/markdown"],
+      [new File(["x"], "b.md", { type: "text/x-markdown" }), "text/markdown"],
+      [new File(["x"], "c.pdf", { type: "application/x-pdf" }), "application/pdf"],
+      [new File(["x"], "d.txt", { type: "" }), "text/plain"],
+    ];
+    for (const [f, expected] of cases) {
+      const fetcher = mockFetch(
+        json({ sourceId: SOURCE, uploadUrl: "https://storage.example/x" }),
+        new Response(null, { status: 200 }),
+        json(source()),
+      );
+      await submitFile(fetcher, PROJECT, "t", f);
+      expect(callAt(fetcher, 1).init?.headers).toEqual({ "content-type": expected });
+    }
   });
 
   it("n'appelle pas finalize si l'envoi direct échoue", async () => {

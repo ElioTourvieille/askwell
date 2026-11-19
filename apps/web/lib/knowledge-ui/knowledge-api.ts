@@ -14,6 +14,17 @@ import {
 
 export type FetchLike = typeof fetch;
 
+/**
+ * Content-Type du PUT vers l'URL présignée, fixe par type de fichier.
+ * Dupliquée VOLONTAIREMENT côté serveur (tâche A1, P3C-T02) : la signature de l'URL utilise exactement
+ * ces valeurs, donc tout écart donne un 403 du stockage. Ne pas la déplacer dans `packages/shared`.
+ */
+export const UPLOAD_CONTENT_TYPES: Record<KnowledgeFileType, string> = {
+  pdf: "application/pdf",
+  md: "text/markdown",
+  txt: "text/plain",
+};
+
 export type SourceResult = { ok: true; source: KnowledgeSource } | { ok: false; message: string };
 
 const NETWORK_ERROR = "Connexion impossible. Vérifiez votre réseau puis réessayez.";
@@ -125,10 +136,15 @@ export async function submitFile(
   const reservation = UploadUrlResponseSchema.safeParse(await reserve.json().catch(() => null));
   if (!reservation.success) return { ok: false, message: UNKNOWN_ERROR };
 
-  // Direct vers le stockage depuis le navigateur : pas de cookie, pas d'en-tête personnalisé.
+  // Direct vers le stockage depuis le navigateur, sans cookie. Le Content-Type est explicite : l'URL
+  // présignée le signe (project.md §9), alors que `file.type` varie selon l'OS (vide, `text/x-markdown`…).
   let put: Response;
   try {
-    put = await fetcher(reservation.data.uploadUrl, { method: "PUT", body: file });
+    put = await fetcher(reservation.data.uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: { "content-type": UPLOAD_CONTENT_TYPES[valid.type] },
+    });
   } catch {
     return { ok: false, message: UPLOAD_ERROR };
   }
