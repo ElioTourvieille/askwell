@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { APP_NAME } from "@askwell/shared";
 import { DashboardShell } from "../../components/dashboard/DashboardShell";
 import { ensureAccount } from "../../lib/accounts/ensure-account";
+import { AppClerkProvider } from "../(app)/AppClerkProvider";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // L'identifiant vient de la session Clerk côté serveur, jamais de la requête.
@@ -12,10 +13,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   await ensureAccount(userId);
 
   return (
-    <div data-theme="light" className="min-h-screen bg-bg text-fg">
-      <DashboardShell appName={APP_NAME} userMenu={<UserButton />}>
-        {children}
-      </DashboardShell>
-    </div>
+    <AppClerkProvider>
+      <div data-theme="light" className="min-h-screen bg-bg text-fg">
+        <DashboardShell appName={APP_NAME} userMenu={<UserButton />}>
+          {children}
+        </DashboardShell>
+      </div>
+    </AppClerkProvider>
   );
 }
