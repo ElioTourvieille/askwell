@@ -1,7 +1,7 @@
 import { ChatRequestSchema, PLAN_LIMITS, type ChatRequest, type ChatResponse } from "@askwell/shared";
 import { apiError } from "../../../../lib/api/errors";
 import { answerQuestion } from "../../../../lib/chat/answer";
-import { protectChatMessage, type ChatBlockReason } from "../../../../lib/chat/arcjet";
+import { protectChatMessage, protectWidgetIp, type ChatBlockReason } from "../../../../lib/chat/arcjet";
 import { retrieveChunks } from "../../../../lib/chat/retrieve";
 import { WIDGET_CORS_HEADERS } from "../../../../lib/widget/cors";
 import { consumeMessage, conversationBelongsToProject, findProjectByKey, saveChatTurn } from "./store";
@@ -62,6 +62,22 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 }
 
 async function handleChat(request: Request): Promise<Outcome> {
+  // Étape 0 : limite par adresse IP seule (B1-T02). Un visiteur qui change de clé à chaque requête ne
+  // contourne pas ce compteur, et ne déclenche donc pas de lecture de base pour chaque clé inconnue.
+  const ip = await protectWidgetIp(request);
+  if (ip === "rate_limited") {
+    return done(apiError("rate_limited", "Trop de messages en peu de temps. Réessayez dans une minute."), {
+      kind: "blocked",
+      reason: "rate_limit",
+    });
+  }
+  if (ip === "unavailable") {
+    return done(apiError("internal_error", "Le service est indisponible pour le moment. Réessayez dans un instant."), {
+      kind: "blocked",
+      reason: "unavailable",
+    });
+  }
+
   // Étape 2 (forme) : on lit la clé et le message, indispensables à la protection. Aucune base ni IA touchée.
   const input = await readRequest(request);
   if (!input) {
