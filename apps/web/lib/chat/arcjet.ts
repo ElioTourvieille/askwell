@@ -43,6 +43,54 @@ function getArcjet() {
   return client;
 }
 
+/**
+ * Limite par adresse IP seule (B1-T02), sur toutes les routes publiques `/api/widget/*`.
+ *
+ * La limite du chat compte par IP + clé publique : changer de `pk_…` à chaque requête donne un compteur neuf,
+ * donc une lecture de base (`findProjectByKey`) avant le 404. Ce compteur-ci ignore la clé : 60 requêtes par
+ * minute et par IP, quelle que soit la clé. Plus large que la limite par clé (20) pour ne pas gêner un site
+ * derrière une adresse partagée. Valeur locale : `packages/shared` ne change pas.
+ */
+export const WIDGET_IP_RATE_LIMIT_PER_MINUTE = 60;
+
+export type WidgetIpProtection = "allowed" | "rate_limited" | "unavailable";
+
+function createIpClient() {
+  const key = process.env.ARCJET_KEY;
+  if (!key) {
+    throw new Error("ARCJET_KEY est absente : la limite par adresse IP ne peut pas être créée (voir project.md §11).");
+  }
+  return arcjet({
+    key,
+    characteristics: ["ip.src"],
+    rules: [slidingWindow({ mode: "LIVE", interval: "1m", max: WIDGET_IP_RATE_LIMIT_PER_MINUTE })],
+  });
+}
+
+let ipClient: ReturnType<typeof createIpClient> | undefined;
+
+function getIpArcjet() {
+  ipClient ??= createIpClient();
+  return ipClient;
+}
+
+/**
+ * Compte la requête pour son adresse IP, avant toute lecture de base. L'appelant choisit quoi faire quand
+ * `unavailable` (le chat échoue fermé ; la configuration du widget laisse passer).
+ */
+export async function protectWidgetIp(request: Request): Promise<WidgetIpProtection> {
+  let decision;
+  try {
+    decision = await getIpArcjet().protect(request);
+  } catch (error) {
+    console.error("Limite par adresse IP indisponible", error);
+    return "unavailable";
+  }
+  if (decision.isErrored()) return "unavailable";
+  if (!decision.isDenied()) return "allowed";
+  return decision.reason.isRateLimit() ? "rate_limited" : "unavailable";
+}
+
 export type ChatProtectionInput = {
   /** Requête entrante : le SDK en lit l'adresse IP (jamais un en-tête recopié à la main). */
   request: Request;

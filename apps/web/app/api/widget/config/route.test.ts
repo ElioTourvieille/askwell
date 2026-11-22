@@ -1,7 +1,8 @@
 import { ApiErrorSchema, DEFAULT_WIDGET_CONFIG, WidgetConfigResponseSchema } from "@askwell/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getWidgetConfig } = vi.hoisted(() => ({ getWidgetConfig: vi.fn() }));
+const { getWidgetConfig, protectWidgetIp } = vi.hoisted(() => ({ getWidgetConfig: vi.fn(), protectWidgetIp: vi.fn() }));
+vi.mock("../../../../lib/chat/arcjet", () => ({ protectWidgetIp }));
 vi.mock("../../../../lib/widget/get-widget-config", () => ({ getWidgetConfig }));
 
 import { GET, OPTIONS } from "./route";
@@ -11,6 +12,7 @@ const PRO = { button_color: "#ff0000", position: "top-left", label: "Aide", anim
 
 beforeEach(() => {
   vi.clearAllMocks();
+  protectWidgetIp.mockResolvedValue("allowed");
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -65,5 +67,36 @@ describe("OPTIONS /api/widget/config", () => {
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     expect(res.headers.get("access-control-allow-methods")).toBe("GET, OPTIONS");
+  });
+});
+
+describe("GET /api/widget/config : limite par adresse IP seule (B1-T02)", () => {
+  it("100 clés différentes depuis la même IP : bloquées au-delà du seuil, sans lecture de base", async () => {
+    const THRESHOLD = 60;
+    let count = 0;
+    protectWidgetIp.mockImplementation(async () => (++count > THRESHOLD ? "rate_limited" : "allowed"));
+    getWidgetConfig.mockResolvedValue(null);
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 100; i++) statuses.push((await get(`?key=pk_inconnue${i}`)).status);
+
+    expect(statuses.slice(0, THRESHOLD).every((s) => s === 404)).toBe(true);
+    expect(statuses.slice(THRESHOLD).every((s) => s === 429)).toBe(true);
+    expect(getWidgetConfig).toHaveBeenCalledTimes(THRESHOLD);
+  });
+
+  it("limité : 429 rate_limited avec CORS, sans lecture de base", async () => {
+    protectWidgetIp.mockResolvedValue("rate_limited");
+    const res = await get("?key=pk_abc123");
+    expect(res.status).toBe(429);
+    expect(ApiErrorSchema.parse(await res.json()).error.code).toBe("rate_limited");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(getWidgetConfig).not.toHaveBeenCalled();
+  });
+
+  it("Arcjet indisponible : la configuration est quand même servie (échec ouvert)", async () => {
+    protectWidgetIp.mockResolvedValue("unavailable");
+    getWidgetConfig.mockResolvedValue({ ...DEFAULT_WIDGET_CONFIG, show_badge: true });
+    expect((await get("?key=pk_abc123")).status).toBe(200);
   });
 });

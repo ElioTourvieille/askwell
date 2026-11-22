@@ -133,3 +133,49 @@ describe("client Arcjet", () => {
     expect(protect).not.toHaveBeenCalled();
   });
 });
+
+describe("protectWidgetIp (limite par adresse IP seule)", () => {
+  const ipRequest = new Request("https://app.test/api/widget/config?key=pk_x");
+
+  it("compte par IP seule, 60 par minute, en mode LIVE, sans clé publique", async () => {
+    protect.mockResolvedValue(decision("allow"));
+    const { protectWidgetIp, WIDGET_IP_RATE_LIMIT_PER_MINUTE } = await load();
+    expect(await protectWidgetIp(ipRequest)).toBe("allowed");
+
+    expect(WIDGET_IP_RATE_LIMIT_PER_MINUTE).toBe(60);
+    expect(WIDGET_IP_RATE_LIMIT_PER_MINUTE).toBeGreaterThan(CHAT_RATE_LIMIT_PER_MINUTE);
+    expect(slidingWindow).toHaveBeenCalledWith({ mode: "LIVE", interval: "1m", max: 60 });
+    expect(arcjetFactory).toHaveBeenCalledWith(expect.objectContaining({ characteristics: ["ip.src"] }));
+    expect(protect).toHaveBeenCalledWith(ipRequest);
+  });
+
+  it("renvoie rate_limited quand le compteur est dépassé", async () => {
+    protect.mockResolvedValue(decision("rate_limit"));
+    const { protectWidgetIp } = await load();
+    expect(await protectWidgetIp(ipRequest)).toBe("rate_limited");
+  });
+
+  it("renvoie unavailable sur erreur Arcjet, autre refus, exception ou clé absente", async () => {
+    const { protectWidgetIp } = await load();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    protect.mockResolvedValue(decision("error"));
+    expect(await protectWidgetIp(ipRequest)).toBe("unavailable");
+    protect.mockResolvedValue(decision("other_deny"));
+    expect(await protectWidgetIp(ipRequest)).toBe("unavailable");
+    protect.mockRejectedValue(new Error("réseau"));
+    expect(await protectWidgetIp(ipRequest)).toBe("unavailable");
+
+    delete process.env.ARCJET_KEY;
+    const fresh = await load();
+    expect(await fresh.protectWidgetIp(ipRequest)).toBe("unavailable");
+  });
+
+  it("laisse intacte la limite par clé + IP du chat (20/min, ip.src + publicKey)", async () => {
+    protect.mockResolvedValue(decision("allow"));
+    const { protectChatMessage } = await load();
+    await protectChatMessage(input);
+    expect(slidingWindow).toHaveBeenCalledWith({ mode: "LIVE", interval: "1m", max: CHAT_RATE_LIMIT_PER_MINUTE });
+    expect(arcjetFactory).toHaveBeenCalledWith(expect.objectContaining({ characteristics: ["ip.src", "publicKey"] }));
+  });
+});

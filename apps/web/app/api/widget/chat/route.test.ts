@@ -8,6 +8,7 @@ const PROJECT = { id: "projet-1", plan: "free" as const };
 
 const m = vi.hoisted(() => ({
   protectChatMessage: vi.fn(),
+  protectWidgetIp: vi.fn(),
   retrieveChunks: vi.fn(),
   answerQuestion: vi.fn(),
   findProjectByKey: vi.fn(),
@@ -19,7 +20,10 @@ const m = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("../../../../lib/chat/arcjet", () => ({ protectChatMessage: m.protectChatMessage }));
+vi.mock("../../../../lib/chat/arcjet", () => ({
+  protectChatMessage: m.protectChatMessage,
+  protectWidgetIp: m.protectWidgetIp,
+}));
 vi.mock("../../../../lib/chat/retrieve", () => ({ retrieveChunks: m.retrieveChunks }));
 vi.mock("../../../../lib/chat/answer", () => ({ answerQuestion: m.answerQuestion }));
 vi.mock("./store", () => ({
@@ -64,6 +68,7 @@ function expectUntouched({ consumed = false } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
+  m.protectWidgetIp.mockResolvedValue("allowed");
   m.protectChatMessage.mockResolvedValue({ status: "allowed" });
   m.findProjectByKey.mockResolvedValue(PROJECT);
   m.conversationBelongsToProject.mockResolvedValue(true);
@@ -360,5 +365,46 @@ describe("CORS et session", () => {
     m.protectChatMessage.mockResolvedValue({ status: "blocked", reason: "injection" });
     await post();
     expect(m.clerkAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/widget/chat : limite par adresse IP seule (B1-T02)", () => {
+  it("100 requêtes avec 100 clés différentes : bloquées au-delà du seuil par IP, sans lecture de base", async () => {
+    const THRESHOLD = 60;
+    let count = 0;
+    // Compteur par IP seule : il ignore la clé, comme le vrai client Arcjet (characteristics: ["ip.src"]).
+    m.protectWidgetIp.mockImplementation(async () => (++count > THRESHOLD ? "rate_limited" : "allowed"));
+    m.findProjectByKey.mockResolvedValue(null);
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 100; i++) statuses.push((await post(body({ key: `pk_inconnue${i}` }))).status);
+
+    expect(statuses.slice(0, THRESHOLD).every((s) => s === 404)).toBe(true);
+    expect(statuses.slice(THRESHOLD).every((s) => s === 429)).toBe(true);
+    expect(m.findProjectByKey).toHaveBeenCalledTimes(THRESHOLD);
+  });
+
+  it("limité par IP : 429 rate_limited, avant la lecture du corps, la protection par clé et la base", async () => {
+    m.protectWidgetIp.mockResolvedValue("rate_limited");
+    const res = await post();
+    expect(res.status).toBe(429);
+    expect((await errorOf(res)).code).toBe("rate_limited");
+    expect(m.protectChatMessage).not.toHaveBeenCalled();
+    expect(m.findProjectByKey).not.toHaveBeenCalled();
+    expectUntouched();
+  });
+
+  it("limite par IP indisponible : échec fermé, 500, rien n'est touché", async () => {
+    m.protectWidgetIp.mockResolvedValue("unavailable");
+    const res = await post();
+    expect(res.status).toBe(500);
+    expect(m.findProjectByKey).not.toHaveBeenCalled();
+    expectUntouched();
+  });
+
+  it("la limite par clé + IP reste appelée une fois par message autorisé", async () => {
+    await post();
+    expect(m.protectWidgetIp).toHaveBeenCalledTimes(1);
+    expect(m.protectChatMessage).toHaveBeenCalledTimes(1);
   });
 });
