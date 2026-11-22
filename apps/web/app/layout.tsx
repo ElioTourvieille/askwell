@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
-import { frFR } from "@clerk/localizations";
 import { APP_NAME } from "@askwell/shared";
 import "./globals.css";
 
@@ -8,19 +6,11 @@ export const metadata: Metadata = {
   title: APP_NAME,
 };
 
+// Pas de ClerkProvider ici : voir app/(app)/AppClerkProvider.tsx.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider
-      localization={frFR}
-      signInUrl="/sign-in"
-      signUpUrl="/sign-up"
-      signInFallbackRedirectUrl="/dashboard"
-      signUpFallbackRedirectUrl="/dashboard"
-      afterSignOutUrl="/sign-in"
-    >
-      <html lang="fr">
-        <body className="min-h-screen antialiased">{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="fr">
+      <body className="min-h-screen antialiased">{children}</body>
+    </html>
   );
 }
