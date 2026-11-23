@@ -3,6 +3,7 @@ import { ErrorState } from "../../components/states";
 import { ProjectsManager } from "../../components/projects";
 import { createOwnerClient } from "../../lib/db/owner";
 import { toProject } from "../../lib/projects/to-project";
+import { loadOwnerPlan } from "../../lib/usage/load-plan";
 
 /**
  * Lecture côté serveur avec le client propriétaire (même requête que GET /api/projects : la RLS fait le tri).
@@ -14,11 +15,14 @@ export default async function DashboardPage() {
   await auth.protect();
 
   let projects;
+  let plan;
   try {
     const owner = await createOwnerClient();
     const { data, error } = await owner.from("projects").select("*").order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     projects = data.map(toProject);
+    // Le forfait est lu sur le serveur, avec les owner_id des lignes que la RLS vient de renvoyer.
+    plan = await loadOwnerPlan(data.map((row) => row.owner_id));
   } catch (error) {
     console.error("Dashboard : lecture des projets", error);
     return (
@@ -32,7 +36,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Projets</h1>
-      <ProjectsManager initialProjects={projects} />
+      <ProjectsManager initialProjects={projects} plan={plan} />
     </div>
   );
 }

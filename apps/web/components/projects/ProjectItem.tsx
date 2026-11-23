@@ -1,13 +1,16 @@
 "use client";
 
-import type { Project } from "@askwell/shared";
+import type { Plan, Project } from "@askwell/shared";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { formatCreatedAt, formatMessagesUsed } from "../../lib/projects-ui/format";
 import { Badge, Button, Card, Input } from "../ui";
+import { UsageMeter } from "./usage";
 
 type Props = {
   project: Project;
+  /** Forfait du compte, lu sur le serveur. Absent : l'utilisation détaillée n'est pas affichée. */
+  plan?: Plan | null;
   /** Retourne `null` en cas de succès, sinon le message d'erreur. */
   onRename: (id: string, name: string) => Promise<string | null>;
   onDelete: (id: string) => Promise<string | null>;
@@ -19,7 +22,7 @@ type Props = {
 const LINK_CLASS =
   "inline-flex min-h-touch items-center justify-center rounded-control border border-glass-border bg-glass px-5 text-sm font-medium text-fg backdrop-blur-(--blur-glass) hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
-export function ProjectItem({ project, onRename, onDelete, initialMode = "view", initialError = null }: Props) {
+export function ProjectItem({ project, plan = null, onRename, onDelete, initialMode = "view", initialError = null }: Props) {
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState(project.name);
   const [error, setError] = useState<string | null>(initialError);
@@ -76,9 +79,10 @@ export function ProjectItem({ project, onRename, onDelete, initialMode = "view",
         <div className="flex flex-col gap-3">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
             <h3 className="min-w-0 text-lg font-semibold break-words">{project.name}</h3>
-            <Badge>{formatMessagesUsed(project.messagesUsed)}</Badge>
+            {plan ? null : <Badge>{formatMessagesUsed(project.messagesUsed)}</Badge>}
           </div>
           <p className="text-sm text-muted">Créé le {formatCreatedAt(project.createdAt)}</p>
+          {plan ? <UsageMeter messagesUsed={project.messagesUsed} periodStart={project.periodStart} plan={plan} /> : null}
           {mode === "confirm-delete" ? (
             <div role="alertdialog" aria-label="Confirmer la suppression" className="flex flex-col gap-3">
               <p className="text-sm break-words">

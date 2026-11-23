@@ -1,6 +1,6 @@
 "use client";
 
-import type { Project } from "@askwell/shared";
+import type { Plan, Project } from "@askwell/shared";
 import { useState } from "react";
 import { deleteProjectRequest, submitCreate, submitRename, type FetchLike } from "../../lib/projects-ui/projects-api";
 import { EmptyState } from "../states";
@@ -8,9 +8,9 @@ import { GlassPanel } from "../ui";
 import { CreateProjectForm } from "./CreateProjectForm";
 import { ProjectItem } from "./ProjectItem";
 
-type Props = { initialProjects: Project[]; fetcher?: FetchLike };
+type Props = { initialProjects: Project[]; plan?: Plan | null; fetcher?: FetchLike };
 
-export function ProjectsManager({ initialProjects, fetcher }: Props) {
+export function ProjectsManager({ initialProjects, plan = null, fetcher }: Props) {
   const [projects, setProjects] = useState(initialProjects);
   const send: FetchLike = fetcher ?? ((input, init) => fetch(input, init));
 
@@ -46,7 +46,7 @@ export function ProjectsManager({ initialProjects, fetcher }: Props) {
         <ul className="flex flex-col gap-4">
           {projects.map((project) => (
             <li key={project.id}>
-              <ProjectItem project={project} onRename={rename} onDelete={remove} />
+              <ProjectItem project={project} plan={plan} onRename={rename} onDelete={remove} />
             </li>
           ))}
         </ul>
