@@ -102,6 +102,9 @@ export function ProjectItem({ project, onRename, onDelete, initialMode = "view",
               <Link href={`/dashboard/projects/${project.id}/knowledge`} className={LINK_CLASS}>
                 Connaissances
               </Link>
+              <Link href={`/dashboard/projects/${project.id}/conversations`} className={LINK_CLASS}>
+                Conversations
+              </Link>
               <Button
                 variant="secondary"
                 onClick={() => {
