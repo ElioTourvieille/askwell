@@ -3,6 +3,8 @@ packages:
   - "packages/*"
 
 # pnpm 12 fails the install when a dependency has a build script that is not
-# approved. esbuild (pulled in by tsup and vitest) is the only one.
+# approved. esbuild (pulled in by tsup and vitest) is the only one to run.
+# core-js (pulled in by posthog-js) only has an optional postinstall banner: refused on purpose.
 allowBuilds:
   esbuild: true
+  core-js: false

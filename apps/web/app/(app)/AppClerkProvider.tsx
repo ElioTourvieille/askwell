@@ -1,5 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import { frFR } from "@clerk/localizations";
+import { PostHogIdentify } from "./PostHogIdentify";
 
 /**
  * ClerkProvider limité aux pages qui ont une session (/dashboard, /sign-in, /sign-up).
@@ -16,6 +17,7 @@ export function AppClerkProvider({ children }: { children: React.ReactNode }) {
       signUpFallbackRedirectUrl="/dashboard"
       afterSignOutUrl="/sign-in"
     >
+      <PostHogIdentify />
       {children}
     </ClerkProvider>
   );
